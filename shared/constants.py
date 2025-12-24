@@ -1,0 +1,47 @@
+# shared/constants.py
+"""
+Hằng số dùng chung cho cả client và server
+"""
+
+# Network
+HOST = 'localhost'
+PORT = 5555
+BUFFER_SIZE = 4096
+
+# Screen
+SCREEN_WIDTH = 800
+SCREEN_HEIGHT = 600
+FPS = 60
+
+# Colors
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+GRAY = (128, 128, 128)
+
+# Paddle
+PADDLE_WIDTH = 15
+PADDLE_HEIGHT = 100
+PADDLE_SPEED = 8
+PADDLE_OFFSET = 50  # Khoảng cách từ paddle đến rìa màn hình
+
+# Ball
+BALL_SIZE = 15
+BALL_SPEED_X = 5
+BALL_SPEED_Y = 5
+BALL_MAX_SPEED = 10
+
+# Game
+WINNING_SCORE = 5
+NET_WIDTH = 5
+FONT_SIZE = 48
+SMALL_FONT_SIZE = 24
+
+# Message Types
+MSG_CONNECT = "CONNECT"
+MSG_READY = "READY"
+MSG_GAME_STATE = "GAME_STATE"
+MSG_INPUT = "INPUT"
+MSG_DISCONNECT = "DISCONNECT"
+MSG_GAME_OVER = "GAME_OVER"
+MSG_WAIT = "WAIT"
+MSG_PLAYER_ID = "PLAYER_ID"
