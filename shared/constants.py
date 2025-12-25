@@ -22,7 +22,7 @@ GRAY = (128, 128, 128)
 PADDLE_WIDTH = 15
 PADDLE_HEIGHT = 100
 PADDLE_SPEED = 8
-PADDLE_OFFSET = 50  # Khoảng cách từ paddle đến rìa màn hình
+PADDLE_OFFSET = 20  # Khoảng cách từ paddle đến rìa màn hình
 
 # Ball
 BALL_SIZE = 15
