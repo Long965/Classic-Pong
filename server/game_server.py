@@ -1,3 +1,4 @@
+# server/game_server.py
 import socket
 import threading
 import time
@@ -54,6 +55,8 @@ class GameServer:
             except Exception as e:
                 if self.running:
                     print(f"❌ Error accepting connection: {e}")
+
+    # --- ĐÃ XÓA HÀM reset_game() SAI Ở ĐÂY ---
     
     def handle_client(self, conn, addr):
         try:
@@ -91,15 +94,28 @@ class GameServer:
             pass
         
         if room_full:
-            print(f"🎯 Room {room_id} is full! Starting game IMMEDIATELY...")
+            print(f"🎯 Room {room_id} is full! Starting game...")
             room = self.room_manager.get_room(conn)
-            room.active = True 
+            
+            # --- GỌI HÀM RESET CỦA GAME LOGIC ---
+            # Lưu ý: Hàm này nằm trong room.game_logic, KHÔNG phải trong self
+            if room:
+                print(f"Room {room_id}: Resetting game state...")
+                room.game_logic.reset_game() 
+            # ------------------------------------
 
+            # Gửi READY
+            print(f"Room {room_id}: Broadcasting READY...")
             for c in room.get_connections():
                 try:
                     c.send(Message.ready())
                 except:
                     pass
+            
+            time.sleep(0.1) 
+            room.active = True 
+            print(f"✅ Room {room_id} is now ACTIVE.")
+            
         else:
             print(f"⏳ Player {player_id} waiting in room {room_id}...")
             try:
@@ -117,7 +133,7 @@ class GameServer:
     
     def disconnect_client(self, conn):
         if conn in self.clients:
-            addr = self.clients[conn]
+            addr = self.clients.get(conn)
             print(f"👋 Client {addr} disconnected")
             del self.clients[conn]
             
@@ -128,7 +144,6 @@ class GameServer:
             pass
     
     def game_loop(self):
-        """Main game loop - chạy ở 60 FPS"""
         target_fps = FPS
         frame_time = 1.0 / target_fps
         
@@ -138,10 +153,7 @@ class GameServer:
             
             for room in active_rooms:
                 try:
-                    # 1. Cập nhật logic vật lý
                     room.game_logic.update()
-                    
-                    # 2. Lấy trạng thái game và chuyển sang Dictionary
                     state_obj = room.game_logic.get_state()
                     
                     if hasattr(state_obj, 'to_dict'):
@@ -157,10 +169,7 @@ class GameServer:
                             'winner': state_obj.winner
                         }
 
-                    # --- FIX: GỌI TRỰC TIẾP MESSAGE.CREATE ĐỂ TRÁNH LỖI TO_DICT ---
-                    # Thay vì Message.game_state(state_dict), ta dùng:
                     state_msg = Message.create(MSG_GAME_STATE, state_dict)
-                    # --------------------------------------------------------------
                     
                     conns = room.get_connections()
                     for conn in conns:
@@ -169,7 +178,6 @@ class GameServer:
                         except Exception:
                             pass
                     
-                    # Kiểm tra kết thúc game
                     if state_obj.game_over:
                         print(f"🏁 Game in room {room.room_id} finished.")
                         game_over_msg = Message.game_over(state_obj.winner)

@@ -1,22 +1,27 @@
+# client/input_handler.py
 import pygame
 
 class InputHandler:
     def __init__(self):
-        # Trạng thái phím bấm
-        self.move_up = False
-        self.move_down = False
-
-    def update(self):
-        """Cập nhật trạng thái phím từ Pygame events"""
-        keys = pygame.key.get_pressed()
-        # Hỗ trợ cả phím mũi tên và W/S
-        self.move_up = keys[pygame.K_UP] or keys[pygame.K_w]
-        self.move_down = keys[pygame.K_DOWN] or keys[pygame.K_s]
-        
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                return False
-        return True
+        pass
 
     def get_input_data(self):
-        return self.move_up, self.move_down
+        """
+        Kiểm tra trực tiếp trạng thái bàn phím.
+        Trả về: (move_up, move_down)
+        """
+        keys = pygame.key.get_pressed()
+        
+        move_up = False
+        move_down = False
+        
+        # Hỗ trợ cả phím Mũi tên và W/S
+        # K_UP / K_w : Đi lên (y giảm)
+        if keys[pygame.K_UP] or keys[pygame.K_w]:
+            move_up = True
+            
+        # K_DOWN / K_s : Đi xuống (y tăng)
+        if keys[pygame.K_DOWN] or keys[pygame.K_s]:
+            move_down = True
+            
+        return move_up, move_down
