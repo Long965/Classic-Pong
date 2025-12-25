@@ -23,14 +23,25 @@ class UI:
             if self.input_handler.should_quit():
                 return "exit"
             
-            # Handle menu navigation
+            # Get input state
+            move_up, move_down = self.input_handler.get_movement()
+            
+            # Menu navigation
+            if move_up and selected > 0:
+                selected -= 1
+                pygame.time.wait(150)  # Debounce
+            elif move_down and selected < len(options) - 1:
+                selected += 1
+                pygame.time.wait(150)  # Debounce
+            
+            # Handle selection
             if self.input_handler.is_enter_pressed():
                 if selected == 0:
                     return "connect"
                 else:
                     return "exit"
             
-            # Simple menu with Enter to select
+            # Draw menu
             self.renderer.draw_menu("CLASSIC PONG", options, selected)
             self.renderer.update()
     

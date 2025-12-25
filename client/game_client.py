@@ -41,8 +41,11 @@ class GameClient:
     
     def _on_ready(self):
         """Callback khi game ready"""
+        print("🎮 Starting game now!")
         self.game_started = True
         self.ui.set_screen("playing")
+        # Send ready confirmation to server
+        self.network.send_ready()
     
     def _on_game_state(self, game_state):
         """Callback khi nhận game state"""

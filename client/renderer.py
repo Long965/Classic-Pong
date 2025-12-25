@@ -109,10 +109,24 @@ class Renderer:
         title_rect.center = (self.width // 2, self.height // 4)
         self.screen.blit(title_text, title_rect)
         
+        # Instructions
+        hint_text = self.font_small.render("Use W/S or Arrow keys to navigate, Enter to select", True, GRAY)
+        hint_rect = hint_text.get_rect()
+        hint_rect.center = (self.width // 2, self.height // 4 + 60)
+        self.screen.blit(hint_text, hint_rect)
+        
         # Options
         y_start = self.height // 2
         for i, option in enumerate(options):
             color = (100, 200, 255) if i == selected else WHITE
+            
+            # Draw selector arrow
+            if i == selected:
+                arrow = self.font_small.render(">", True, (100, 200, 255))
+                arrow_rect = arrow.get_rect()
+                arrow_rect.center = (self.width // 2 - 150, y_start + i * 50)
+                self.screen.blit(arrow, arrow_rect)
+            
             option_text = self.font_small.render(option, True, color)
             option_rect = option_text.get_rect()
             option_rect.center = (self.width // 2, y_start + i * 50)
