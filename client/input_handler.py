@@ -12,11 +12,13 @@ class InputHandler:
         self.quit_game = False
         self.enter_pressed = False
         self.escape_pressed = False
+        self.space_pressed = False  # Thêm space cho play again
     
     def process_events(self):
         """Xử lý tất cả pygame events"""
         self.enter_pressed = False
         self.escape_pressed = False
+        self.space_pressed = False  # Reset space
         
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -47,6 +49,8 @@ class InputHandler:
             self.enter_pressed = True
         elif key == pygame.K_ESCAPE:
             self.escape_pressed = True
+        elif key == pygame.K_SPACE:
+            self.space_pressed = True
     
     def _handle_keyup(self, key):
         """Xử lý phím thả ra"""
@@ -67,6 +71,10 @@ class InputHandler:
         """Kiểm tra Enter có được nhấn không"""
         return self.enter_pressed
     
+    def is_space_pressed(self):
+        """Kiểm tra Space có được nhấn không"""
+        return self.space_pressed
+    
     def reset(self):
         """Reset input state"""
         self.move_up = False
@@ -74,3 +82,4 @@ class InputHandler:
         self.quit_game = False
         self.enter_pressed = False
         self.escape_pressed = False
+        self.space_pressed = False

@@ -18,6 +18,7 @@ class GameClient:
         self.running = True
         self.game_started = False
         self.player_id = None
+        self.waiting_for_restart = False
         
         # Setup callbacks
         self._setup_callbacks()
@@ -30,6 +31,7 @@ class GameClient:
         self.network.set_callback(MSG_GAME_STATE, self._on_game_state)
         self.network.set_callback(MSG_GAME_OVER, self._on_game_over)
         self.network.set_callback(MSG_DISCONNECT, self._on_disconnect)
+        self.network.set_callback(MSG_RESTART, self._on_restart)
     
     def _on_player_id(self, player_id):
         """Callback khi nhận player ID"""
@@ -54,12 +56,27 @@ class GameClient:
     def _on_game_over(self, winner):
         """Callback khi game over"""
         self.game_started = False
-        self.ui.show_game_over(winner, self.player_id)
+        result = self.ui.show_game_over(winner, self.player_id)
+        
+        if result == "play_again":
+            # Gửi yêu cầu chơi lại
+            self.network.send_play_again()
+            self.waiting_for_restart = True
+            self.ui.set_screen("waiting_restart")
+        elif result == "exit":
+            self.running = False
     
     def _on_disconnect(self):
         """Callback khi disconnect"""
         self.running = False
         self.ui.show_disconnected()
+    
+    def _on_restart(self):
+        """Callback khi restart game"""
+        print("🎮 Game restarted!")
+        self.game_started = True
+        self.waiting_for_restart = False
+        self.ui.set_screen("playing")
     
     def run(self):
         """Main game loop"""
@@ -71,9 +88,22 @@ class GameClient:
                 self.cleanup()
                 return
             
+            # Handle menu choice
+            ai_mode = False
+            ai_difficulty = "medium"
+            
+            if choice == "ai_mode":
+                # Show difficulty menu
+                difficulty = self.ui.show_ai_difficulty_menu()
+                if difficulty is None:  # Back button
+                    self.run()  # Restart menu
+                    return
+                ai_mode = True
+                ai_difficulty = difficulty
+            
             # Connect to server
             self.ui.show_connecting()
-            if not self.network.connect():
+            if not self.network.connect(ai_mode=ai_mode, ai_difficulty=ai_difficulty):
                 print("❌ Failed to connect to server")
                 self.cleanup()
                 return
@@ -89,6 +119,10 @@ class GameClient:
                 # Handle different states
                 if self.ui.current_screen == "waiting":
                     self.renderer.draw_waiting()
+                    self.renderer.update()
+                
+                elif self.ui.current_screen == "waiting_restart":
+                    self.renderer.draw_waiting_restart()
                     self.renderer.update()
                 
                 elif self.ui.current_screen == "playing" and self.game_started:

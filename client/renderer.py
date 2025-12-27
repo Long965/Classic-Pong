@@ -36,7 +36,7 @@ class Renderer:
         
         # Draw paddles
         self._draw_paddle(game_state.paddle1, player_id == 1)
-        self._draw_paddle(game_state.paddle2, player_id == 2)
+        self._draw_paddle(game_state.paddle2, player_id == 2 or player_id == 1)  # Highlight both if vs AI
         
         # Draw ball
         self._draw_ball(game_state.ball)
@@ -47,6 +47,10 @@ class Renderer:
         # Draw player indicator
         if player_id:
             self._draw_player_indicator(player_id)
+        
+        # Draw AI indicator nếu là AI mode
+        if player_id == 1:  # Player 1 vs AI
+            self._draw_ai_indicator()
     
     def _draw_net(self):
         """Vẽ lưới giữa màn hình"""
@@ -97,6 +101,14 @@ class Renderer:
         indicator = self.font_small.render(text, True, (100, 200, 255))
         rect = indicator.get_rect()
         rect.bottomright = (self.width - 10, self.height - 10)
+        self.screen.blit(indicator, rect)
+    
+    def _draw_ai_indicator(self):
+        """Vẽ indicator cho AI"""
+        text = "🤖 AI Opponent"
+        indicator = self.font_small.render(text, True, (255, 100, 100))
+        rect = indicator.get_rect()
+        rect.bottomleft = (10, self.height - 10)
         self.screen.blit(indicator, rect)
     
     def draw_menu(self, title, options, selected=0):
@@ -163,14 +175,26 @@ class Renderer:
         
         result = self.font_large.render(result_text, True, color)
         rect = result.get_rect()
-        rect.center = (self.width // 2, self.height // 2 - 50)
+        rect.center = (self.width // 2, self.height // 2 - 80)
         self.screen.blit(result, rect)
         
+        # Winner announcement
+        winner_text = f"Player {winner} Wins!"
+        winner_render = self.font_small.render(winner_text, True, WHITE)
+        winner_rect = winner_render.get_rect()
+        winner_rect.center = (self.width // 2, self.height // 2 - 20)
+        self.screen.blit(winner_render, winner_rect)
+        
         # Instructions
-        instruction = self.font_small.render("Press ESC to exit", True, WHITE)
-        inst_rect = instruction.get_rect()
-        inst_rect.center = (self.width // 2, self.height // 2 + 50)
-        self.screen.blit(instruction, inst_rect)
+        instruction1 = self.font_small.render("Press SPACE to play again", True, (100, 200, 255))
+        inst_rect1 = instruction1.get_rect()
+        inst_rect1.center = (self.width // 2, self.height // 2 + 40)
+        self.screen.blit(instruction1, inst_rect1)
+        
+        instruction2 = self.font_small.render("Press ESC to exit", True, GRAY)
+        inst_rect2 = instruction2.get_rect()
+        inst_rect2.center = (self.width // 2, self.height // 2 + 80)
+        self.screen.blit(instruction2, inst_rect2)
     
     def draw_disconnected(self):
         """Vẽ màn hình disconnect"""
@@ -205,6 +229,23 @@ class Renderer:
     def get_fps(self):
         """Lấy FPS hiện tại"""
         return self.clock.get_fps()
+    
+    def draw_waiting_restart(self):
+        """Vẽ màn hình chờ player khác chơi lại"""
+        self.clear()
+        
+        text = "Waiting for other player..."
+        waiting_text = self.font_small.render(text, True, WHITE)
+        rect = waiting_text.get_rect()
+        rect.center = (self.width // 2, self.height // 2)
+        self.screen.blit(waiting_text, rect)
+        
+        # Animation dots
+        dots = "." * (pygame.time.get_ticks() // 500 % 4)
+        dots_text = self.font_small.render(dots, True, WHITE)
+        dots_rect = dots_text.get_rect()
+        dots_rect.center = (self.width // 2, self.height // 2 + 40)
+        self.screen.blit(dots_text, dots_rect)
     
     def quit(self):
         """Quit pygame"""

@@ -76,11 +76,17 @@ class GameServer:
                 if msg_type == MSG_CONNECT:
                     self.handle_connect(conn, addr)
                 
+                elif msg_type == MSG_AI_MODE:
+                    self.handle_ai_mode(conn, addr, msg_data)
+                
                 elif msg_type == MSG_READY:
                     self.handle_ready(conn)
                 
                 elif msg_type == MSG_INPUT:
                     self.handle_input(conn, msg_data)
+                
+                elif msg_type == MSG_PLAY_AGAIN:
+                    self.handle_play_again(conn)
                 
                 elif msg_type == MSG_DISCONNECT:
                     break
@@ -92,8 +98,8 @@ class GameServer:
             self.disconnect_client(conn)
     
     def handle_connect(self, conn, addr):
-        """Xử lý khi client connect"""
-        room_id, player_id, room_full = self.room_manager.find_or_create_room(conn, addr)
+        """Xử lý khi client connect (Multiplayer)"""
+        room_id, player_id, room_full = self.room_manager.find_or_create_room(conn, addr, ai_mode=False)
         
         # Gửi player ID
         conn.send(Message.player_id(player_id))
@@ -109,6 +115,25 @@ class GameServer:
         else:
             print(f"⏳ Player {player_id} waiting in room {room_id}...")
             conn.send(Message.wait())
+    
+    def handle_ai_mode(self, conn, addr, data):
+        """Xử lý khi client chọn AI mode"""
+        difficulty = data.get('difficulty', 'medium')
+        room_id, player_id, room_full = self.room_manager.find_or_create_room(
+            conn, addr, ai_mode=True, ai_difficulty=difficulty
+        )
+        
+        # Gửi player ID
+        conn.send(Message.player_id(player_id))
+        
+        print(f"🤖 AI Room {room_id} created with difficulty: {difficulty}")
+        
+        # AI room tự động full ngay
+        if room_full:
+            try:
+                conn.send(Message.ready())
+            except:
+                pass
     
     def handle_ready(self, conn):
         """Xử lý khi player ready"""
@@ -128,6 +153,23 @@ class GameServer:
             move_up = data.get('move_up', False)
             move_down = data.get('move_down', False)
             room.game_logic.set_paddle_input(player_id, move_up, move_down)
+    
+    def handle_play_again(self, conn):
+        """Xử lý khi player muốn chơi lại"""
+        player_id = self.room_manager.get_player_id(conn)
+        room = self.room_manager.get_room(conn)
+        
+        if room:
+            should_restart = room.set_play_again(player_id)
+            
+            if should_restart:
+                # Broadcast restart message đến cả 2 players
+                restart_msg = Message.restart()
+                for c in room.get_connections():
+                    try:
+                        c.send(restart_msg)
+                    except:
+                        pass
     
     def disconnect_client(self, conn):
         """Xử lý disconnect"""
@@ -168,6 +210,10 @@ class GameServer:
             
             for room in active_rooms:
                 try:
+                    # Update AI nếu có
+                    if room.ai_mode:
+                        room.update_ai()
+                    
                     # Update game logic
                     room.game_logic.update()
                     

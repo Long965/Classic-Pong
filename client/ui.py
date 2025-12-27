@@ -14,7 +14,7 @@ class UI:
     
     def show_main_menu(self):
         """Hiển thị main menu"""
-        options = ["Connect to Server", "Exit"]
+        options = ["Multiplayer (2 Players)", "Play vs AI", "Exit"]
         selected = 0
         
         while True:
@@ -37,12 +37,51 @@ class UI:
             # Handle selection
             if self.input_handler.is_enter_pressed():
                 if selected == 0:
-                    return "connect"
+                    return "multiplayer"
+                elif selected == 1:
+                    return "ai_mode"
                 else:
                     return "exit"
             
             # Draw menu
             self.renderer.draw_menu("CLASSIC PONG", options, selected)
+            self.renderer.update()
+    
+    def show_ai_difficulty_menu(self):
+        """Hiển thị menu chọn độ khó AI"""
+        options = ["Easy", "Medium", "Hard", "Back"]
+        selected = 1  # Default: Medium
+        
+        while True:
+            self.input_handler.process_events()
+            
+            if self.input_handler.should_quit():
+                return None
+            
+            # Get input state
+            move_up, move_down = self.input_handler.get_movement()
+            
+            # Menu navigation
+            if move_up and selected > 0:
+                selected -= 1
+                pygame.time.wait(150)
+            elif move_down and selected < len(options) - 1:
+                selected += 1
+                pygame.time.wait(150)
+            
+            # Handle selection
+            if self.input_handler.is_enter_pressed():
+                if selected == 0:
+                    return "easy"
+                elif selected == 1:
+                    return "medium"
+                elif selected == 2:
+                    return "hard"
+                else:
+                    return None  # Back
+            
+            # Draw menu
+            self.renderer.draw_menu("SELECT DIFFICULTY", options, selected)
             self.renderer.update()
     
     def show_connecting(self):
@@ -72,14 +111,28 @@ class UI:
     def show_game_over(self, winner, player_id):
         """Hiển thị game over"""
         self.current_screen = "game_over"
+        waiting_for_restart = False
+        
         while self.current_screen == "game_over":
             self.input_handler.process_events()
             
             if self.input_handler.should_quit():
-                return
+                return "exit"
             
-            self.renderer.draw_game_over(winner, player_id)
+            # Nếu nhấn Space → muốn chơi lại
+            if self.input_handler.is_space_pressed() and not waiting_for_restart:
+                waiting_for_restart = True
+                return "play_again"
+            
+            # Vẽ game over hoặc waiting screen
+            if waiting_for_restart:
+                self.renderer.draw_waiting_restart()
+            else:
+                self.renderer.draw_game_over(winner, player_id)
+            
             self.renderer.update()
+        
+        return "exit"
     
     def show_disconnected(self):
         """Hiển thị màn hình disconnected"""

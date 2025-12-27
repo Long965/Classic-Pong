@@ -22,6 +22,21 @@ class GameLogic:
         
         self.state.ball.vx = BALL_SPEED_X * direction
         self.state.ball.vy = random.uniform(-BALL_SPEED_Y, BALL_SPEED_Y)
+
+    def reset_game(self):
+        """Reset toàn bộ trạng thái game về 0-0"""
+        self.state.score1 = 0
+        self.state.score2 = 0
+        self.state.game_over = False
+        self.state.winner = None
+        
+        # Reset vị trí paddles
+        self.state.paddle1.y = (SCREEN_HEIGHT - PADDLE_HEIGHT) // 2
+        self.state.paddle2.y = (SCREEN_HEIGHT - PADDLE_HEIGHT) // 2
+        
+        # Reset bóng
+        self.reset_ball()
+    # ----------------------------------
     
     def update(self, dt=1/60):
         """Update game logic"""

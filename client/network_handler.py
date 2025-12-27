@@ -26,18 +26,23 @@ class NetworkHandler:
             MSG_READY: None,
             MSG_GAME_STATE: None,
             MSG_GAME_OVER: None,
-            MSG_DISCONNECT: None
+            MSG_DISCONNECT: None,
+            MSG_RESTART: None
         }
     
-    def connect(self):
+    def connect(self, ai_mode=False, ai_difficulty="medium"):
         """Kết nối đến server"""
         try:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.connect((self.host, self.port))
             self.connected = True
             
-            # Gửi connect message
-            self.socket.send(Message.connect())
+            # Gửi connect message hoặc AI mode message
+            if ai_mode:
+                self.socket.send(Message.ai_mode(ai_difficulty))
+                print(f"🤖 Requesting AI game ({ai_difficulty})...")
+            else:
+                self.socket.send(Message.connect())
             
             # Start receive thread
             self.receive_thread = threading.Thread(target=self._receive_loop, daemon=True)
@@ -82,6 +87,16 @@ class NetworkHandler:
                 self.socket.send(Message.input_data(move_up, move_down))
             except Exception as e:
                 print(f"❌ Failed to send input: {e}")
+                self.connected = False
+    
+    def send_play_again(self):
+        """Gửi yêu cầu chơi lại"""
+        if self.connected:
+            try:
+                self.socket.send(Message.play_again())
+                print("🔄 Requested to play again...")
+            except Exception as e:
+                print(f"❌ Failed to send play again: {e}")
                 self.connected = False
     
     def _receive_loop(self):
@@ -140,6 +155,13 @@ class NetworkHandler:
             self.connected = False
             if self.callbacks[MSG_DISCONNECT]:
                 self.callbacks[MSG_DISCONNECT]()
+        
+        elif msg_type == MSG_RESTART:
+            print("♻️  Game restarting...")
+            self.game_over = False
+            self.winner = None
+            if self.callbacks[MSG_RESTART]:
+                self.callbacks[MSG_RESTART]()
     
     def set_callback(self, msg_type, callback):
         """Set callback cho message type"""
