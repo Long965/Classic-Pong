@@ -3,6 +3,7 @@
 Vẽ graphics với Pygame
 """
 import pygame
+import random # <--- THÊM DÒNG NÀY
 from shared.constants import *
 
 class Renderer:
@@ -19,6 +20,12 @@ class Renderer:
         
         # Clock for FPS
         self.clock = pygame.time.Clock()
+
+        # --- BỔ SUNG ĐỂ THEO DÕI BÓNG ---
+        self.ball_color = WHITE  # Màu ban đầu
+        self.last_ball_x = width // 2 # Vị trí X của bóng ở frame trước
+        # Hướng di chuyển frame trước (1 là phải, -1 là trái, 0 là đứng yên)
+        self.last_dx_sign = 0
     
     def clear(self):
         """Xóa màn hình"""
@@ -73,12 +80,48 @@ class Renderer:
             (paddle.x, paddle.y, paddle.width, paddle.height)
         )
     
+    def _get_random_bright_color(self):
+        """Tạo một màu RGB sáng ngẫu nhiên"""
+        # Đảm bảo màu không quá tối bằng cách random từ 100-255
+        r = random.randint(100, 255)
+        g = random.randint(100, 255)
+        b = random.randint(100, 255)
+        return (r, g, b)
+
     def _draw_ball(self, ball):
-        """Vẽ bóng"""
-        pygame.draw.rect(
+        """Vẽ bóng to hơn, hình tròn và đổi màu khi chạm thanh"""
+
+        # --- 1. Logic đổi màu (Giữ nguyên như trước) ---
+        current_dx = ball.x - self.last_ball_x
+        current_sign = 0
+        if current_dx > 0: current_sign = 1
+        elif current_dx < 0: current_sign = -1
+
+        if current_sign != 0 and current_sign != self.last_dx_sign:
+            if self.last_dx_sign != 0:
+                self.ball_color = self._get_random_bright_color()
+            self.last_dx_sign = current_sign
+
+        self.last_ball_x = ball.x
+
+        # --- 2. Vẽ bóng TO HƠN ---
+        
+        # Bước A: Tính tâm của bóng dựa trên hitbox thật (để bóng không bị lệch)
+        # ball.size là kích thước thật từ server gửi về
+        real_center_x = int(ball.x + ball.size / 2)
+        real_center_y = int(ball.y + ball.size / 2)
+
+        # Bước B: Tự quy định bán kính vẽ (Visual Radius)
+        # Bạn có thể nhân lên (ví dụ * 1.5) hoặc gán số cố định
+        # Ví dụ: ball.size mặc định thường là 10, ta vẽ radius = 10 (đường kính 20 -> to gấp đôi)
+        visual_radius = int(ball.size * 0.8) # <--- CHỈNH SỐ NÀY ĐỂ BÓNG TO/NHỎ
+        # Hoặc gán cứng: visual_radius = 15 
+
+        pygame.draw.circle(
             self.screen,
-            WHITE,
-            (ball.x, ball.y, ball.size, ball.size)
+            self.ball_color,
+            (real_center_x, real_center_y),
+            visual_radius
         )
     
     def _draw_scores(self, score1, score2):
