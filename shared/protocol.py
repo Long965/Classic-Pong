@@ -66,3 +66,18 @@ class Message:
     def game_over(winner):
         """Thông báo game over"""
         return Message.create(MSG_GAME_OVER, {'winner': winner})
+    
+    @staticmethod
+    def play_again():
+        """Client muốn chơi lại"""
+        return Message.create(MSG_PLAY_AGAIN)
+    
+    @staticmethod
+    def restart():
+        """Server restart game"""
+        return Message.create(MSG_RESTART)
+    
+    @staticmethod
+    def ai_mode(difficulty="medium"):
+        """Client yêu cầu chơi với AI"""
+        return Message.create(MSG_AI_MODE, {'difficulty': difficulty})

@@ -1,138 +1,181 @@
+# client/network_handler.py
+"""
+Xử lý network communication
+"""
 import socket
 import threading
-import json
-from shared.constants import HOST, PORT, BUFFER_SIZE, MSG_PLAYER_ID, MSG_GAME_STATE, MSG_WAIT, MSG_GAME_OVER, MSG_READY
+from shared.constants import *
 from shared.protocol import Message
+from shared.models import GameState
 
 class NetworkHandler:
-    def __init__(self):
-        self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    def __init__(self, host=HOST, port=PORT):
+        self.host = host
+        self.port = port
+        self.socket = None
+        self.connected = False
         self.player_id = None
-        self.current_game_state = None
-        self.status = "DISCONNECTED" # Các trạng thái: DISCONNECTED, CONNECTING, WAITING, PLAYING, ENDED
+        self.game_state = None
+        self.waiting = False
+        self.game_over = False
         self.winner = None
-        
-        # Bộ giải mã JSON hỗ trợ tách gói tin bị dính (Sticky Packets)
-        self.decoder = json.JSONDecoder()
-        
-        # Lưu trạng thái phím bấm gần nhất để tránh spam server
-        self.last_input = (None, None) 
-
-    def connect(self):
-        """Thiết lập kết nối tới Server"""
+        self.receive_thread = None
+        self.callbacks = {
+            MSG_PLAYER_ID: None,
+            MSG_WAIT: None,
+            MSG_READY: None,
+            MSG_GAME_STATE: None,
+            MSG_GAME_OVER: None,
+            MSG_DISCONNECT: None,
+            MSG_RESTART: None
+        }
+    
+    def connect(self, ai_mode=False, ai_difficulty="medium"):
+        """Kết nối đến server"""
         try:
-            print(f"🔄 Đang kết nối tới {HOST}:{PORT}...")
-            self.client.connect((HOST, PORT))
+            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.socket.connect((self.host, self.port))
+            self.connected = True
             
-            # [QUAN TRỌNG] Đặt trạng thái CONNECTING ngay lập tức
-            # Để GameLoop biết là đang bận xử lý, không tự out ra Menu
-            self.status = "CONNECTING"
+            # Gửi connect message hoặc AI mode message
+            if ai_mode:
+                self.socket.send(Message.ai_mode(ai_difficulty))
+                print(f"🤖 Requesting AI game ({ai_difficulty})...")
+            else:
+                self.socket.send(Message.connect())
             
-            # Gửi tin nhắn chào hỏi
-            self.client.send(Message.connect())
+            # Start receive thread
+            self.receive_thread = threading.Thread(target=self._receive_loop, daemon=True)
+            self.receive_thread.start()
             
-            # Bắt đầu luồng nhận tin nhắn ngầm
-            thread = threading.Thread(target=self._receive_loop, daemon=True)
-            thread.start()
+            print(f"✅ Connected to server {self.host}:{self.port}")
             return True
             
         except Exception as e:
-            print(f"❌ Lỗi kết nối: {e}")
-            self.status = "DISCONNECTED"
+            print(f"❌ Failed to connect: {e}")
+            self.connected = False
             return False
-
-    def _receive_loop(self):
-        """Vòng lặp nhận dữ liệu liên tục (Xử lý Stream)"""
-        buffer = "" # Bộ đệm chứa chuỗi JSON chưa hoàn chỉnh
-        
-        while True:
+    
+    def disconnect(self):
+        """Ngắt kết nối"""
+        if self.connected and self.socket:
             try:
-                chunk = self.client.recv(BUFFER_SIZE)
-                if not chunk:
-                    print("⚠️ Server đã đóng kết nối.")
-                    self.status = "DISCONNECTED"
+                self.socket.send(Message.disconnect())
+            except:
+                pass
+            
+            try:
+                self.socket.close()
+            except:
+                pass
+            
+            self.connected = False
+            print("👋 Disconnected from server")
+    
+    def send_ready(self):
+        """Gửi ready signal"""
+        if self.connected:
+            try:
+                self.socket.send(Message.ready())
+            except Exception as e:
+                print(f"❌ Failed to send ready: {e}")
+    
+    def send_input(self, move_up, move_down):
+        """Gửi input đến server"""
+        if self.connected:
+            try:
+                self.socket.send(Message.input_data(move_up, move_down))
+            except Exception as e:
+                print(f"❌ Failed to send input: {e}")
+                self.connected = False
+    
+    def send_play_again(self):
+        """Gửi yêu cầu chơi lại"""
+        if self.connected:
+            try:
+                self.socket.send(Message.play_again())
+                print("🔄 Requested to play again...")
+            except Exception as e:
+                print(f"❌ Failed to send play again: {e}")
+                self.connected = False
+    
+    def _receive_loop(self):
+        """Loop nhận data từ server"""
+        while self.connected:
+            try:
+                data = self.socket.recv(BUFFER_SIZE)
+                if not data:
+                    print("⚠️ Server closed connection")
+                    self.connected = False
                     break
                 
-                # Cộng dồn dữ liệu vào bộ đệm
-                buffer += chunk.decode('utf-8')
+                msg_type, msg_data = Message.parse(data)
+                self._handle_message(msg_type, msg_data)
                 
-                # Xử lý cắt chuỗi JSON trong bộ đệm
-                while buffer:
-                    buffer = buffer.lstrip() # Xóa khoảng trắng thừa
-                    if not buffer:
-                        break
-                        
-                    try:
-                        # raw_decode giúp lấy ra 1 JSON hợp lệ và vị trí kết thúc
-                        obj, index = self.decoder.raw_decode(buffer)
-                        
-                        # Lấy thông tin tin nhắn
-                        msg_type = obj.get('type')
-                        data = obj.get('data')
-                        
-                        # Xử lý tin nhắn
-                        if msg_type:
-                            self._handle_message(msg_type, data)
-                        
-                        # Cắt phần đã xử lý, giữ lại phần thừa cho vòng lặp sau
-                        buffer = buffer[index:]
-                        
-                    except json.JSONDecodeError:
-                        # Dữ liệu chưa đủ 1 JSON -> Đợi recv tiếp
-                        break
-                        
-            except ConnectionResetError:
-                print("⚠️ Mất kết nối đột ngột.")
-                self.status = "DISCONNECTED"
-                break
             except Exception as e:
-                print(f"🔥 Lỗi hệ thống: {e}")
-                self.status = "DISCONNECTED"
+                if self.connected:
+                    print(f"❌ Error receiving data: {e}")
+                    self.connected = False
                 break
-
-    def _handle_message(self, msg_type, data):
-        """Phân loại và xử lý tin nhắn từ Server"""
-        
+    
+    def _handle_message(self, msg_type, msg_data):
+        """Xử lý message từ server"""
         if msg_type == MSG_PLAYER_ID:
-            self.player_id = data.get('id')
-            print(f"✅ Đã kết nối! ID của bạn: {self.player_id}")
-            # Khi mới vào, tạm thời chuyển sang WAITING để chờ đối thủ
-            self.status = "WAITING"
-
+            self.player_id = msg_data.get('id')
+            print(f"🎮 You are Player {self.player_id}")
+            if self.callbacks[MSG_PLAYER_ID]:
+                self.callbacks[MSG_PLAYER_ID](self.player_id)
+        
         elif msg_type == MSG_WAIT:
-            self.status = "WAITING"
-            print("⏳ Đang chờ người chơi thứ 2...")
-
+            self.waiting = True
+            print("⏳ Waiting for another player...")
+            if self.callbacks[MSG_WAIT]:
+                self.callbacks[MSG_WAIT]()
+        
         elif msg_type == MSG_READY:
-            self.status = "PLAYING"
-            print("🎮 Trận đấu bắt đầu!")
-
+            self.waiting = False
+            print("🎯 Game starting!")
+            if self.callbacks[MSG_READY]:
+                self.callbacks[MSG_READY]()
+        
         elif msg_type == MSG_GAME_STATE:
-            if data:
-                # Nhận tọa độ -> Chắc chắn là đang chơi
-                self.status = "PLAYING"
-                self.current_game_state = data
-
+            self.game_state = GameState.from_dict(msg_data)
+            if self.callbacks[MSG_GAME_STATE]:
+                self.callbacks[MSG_GAME_STATE](self.game_state)
+        
         elif msg_type == MSG_GAME_OVER:
-            self.status = "ENDED"
-            self.winner = data.get('winner')
-            print(f"🏁 Kết thúc! Người thắng: Player {self.winner}")
-
-    def send_input(self, move_up, move_down):
-        """
-        Gửi phím điều khiển.
-        [TỐI ƯU] Chỉ gửi khi trạng thái phím thay đổi để giảm tải Server.
-        """
-        if self.status != "PLAYING":
-            return
-
-        # So sánh input hiện tại với input lần trước gửi
-        if (move_up, move_down) != self.last_input:
-            try:
-                msg = Message.input_data(move_up, move_down)
-                self.client.send(msg)
-                
-                # Cập nhật lại input cuối cùng
-                self.last_input = (move_up, move_down)
-            except Exception as e:
-                print(f"❌ Lỗi gửi input: {e}")
+            self.game_over = True
+            self.winner = msg_data.get('winner')
+            print(f"🏆 Game Over! Player {self.winner} wins!")
+            if self.callbacks[MSG_GAME_OVER]:
+                self.callbacks[MSG_GAME_OVER](self.winner)
+        
+        elif msg_type == MSG_DISCONNECT:
+            print("⚠️ Other player disconnected")
+            self.connected = False
+            if self.callbacks[MSG_DISCONNECT]:
+                self.callbacks[MSG_DISCONNECT]()
+        
+        elif msg_type == MSG_RESTART:
+            print("♻️  Game restarting...")
+            self.game_over = False
+            self.winner = None
+            if self.callbacks[MSG_RESTART]:
+                self.callbacks[MSG_RESTART]()
+    
+    def set_callback(self, msg_type, callback):
+        """Set callback cho message type"""
+        if msg_type in self.callbacks:
+            self.callbacks[msg_type] = callback
+    
+    def is_connected(self):
+        """Check connection status"""
+        return self.connected
+    
+    def get_game_state(self):
+        """Lấy game state hiện tại"""
+        return self.game_state
+    
+    def get_player_id(self):
+        """Lấy player ID"""
+        return self.player_id

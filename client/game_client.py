@@ -1,136 +1,195 @@
-import pygame
-import sys
+# client/game_client.py
+"""
+Client chính - Main game loop
+"""
 import time
-from shared.constants import SCREEN_WIDTH, SCREEN_HEIGHT, FPS
 from client.network_handler import NetworkHandler
-
-# InputHandler (Dùng bản mới nhất gọn nhẹ)
-class InputHandler:
-    def get_input_data(self):
-        keys = pygame.key.get_pressed()
-        move_up = keys[pygame.K_UP] or keys[pygame.K_w]
-        move_down = keys[pygame.K_DOWN] or keys[pygame.K_s]
-        return move_up, move_down
-
 from client.renderer import Renderer
-from client.ui import UIManager
+from client.input_handler import InputHandler
+from client.ui import UI
+from client.sound_manager import SoundManager 
+from shared.constants import *
 
-class PongClient:
+class GameClient:
     def __init__(self):
-        pygame.init()
-        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-        pygame.display.set_caption("Classic Pong Multiplayer")
-        self.clock = pygame.time.Clock()
-        
-        self.ui = UIManager(self.screen)
-        self.renderer = Renderer(self.screen)
+        self.network = None # Sẽ khởi tạo mỗi khi bắt đầu game mới
+        self.renderer = Renderer()
         self.input_handler = InputHandler()
+        self.ui = UI()
+        self.sound_manager = SoundManager()
         
-        self.state = "MENU"
-        self.network = None 
+        self.running = True
+        self.game_started = False
+        self.player_id = None
+        self.winner = None 
+    
+    def _setup_callbacks(self):
+        """Setup network callbacks"""
+        self.network.set_callback(MSG_PLAYER_ID, self._on_player_id)
+        self.network.set_callback(MSG_WAIT, self._on_wait)
+        self.network.set_callback(MSG_READY, self._on_ready)
+        self.network.set_callback(MSG_GAME_STATE, self._on_game_state)
+        self.network.set_callback(MSG_GAME_OVER, self._on_game_over)
+        self.network.set_callback(MSG_DISCONNECT, self._on_disconnect)
+        self.network.set_callback(MSG_RESTART, self._on_restart)
+    
+    def _on_player_id(self, player_id):
+        self.player_id = player_id
+    
+    def _on_wait(self):
+        self.ui.set_screen("waiting")
+    
+    def _on_ready(self):
+        print("🎮 Starting game now!")
+        self.game_started = True
+        self.ui.set_screen("playing")
+        self.network.send_ready()
+    
+    def _on_game_state(self, game_state):
+        """Xử lý logic âm thanh khi nhận state mới"""
+        if self.network.game_state:
+            old_ball = self.network.game_state.ball
+            new_ball = game_state.ball
+            
+            # 1. Bóng đập vợt (Vận tốc X đổi chiều)
+            if (old_ball.vx > 0 and new_ball.vx < 0) or (old_ball.vx < 0 and new_ball.vx > 0):
+                self.sound_manager.play('paddle_hit')
+            
+            # 2. Bóng đập tường (Vận tốc Y đổi chiều)
+            elif (old_ball.vy > 0 and new_ball.vy < 0) or (old_ball.vy < 0 and new_ball.vy > 0):
+                 if new_ball.y <= 0 or new_ball.y >= SCREEN_HEIGHT - BALL_SIZE:
+                    self.sound_manager.play('wall_hit')
+            
+            # 3. Ghi điểm
+            if game_state.score1 != self.network.game_state.score1 or \
+               game_state.score2 != self.network.game_state.score2:
+                self.sound_manager.play('score')
 
-    def perform_connection(self):
-        """Hàm kết nối vào game"""
-        self.screen.fill((0, 0, 0))
-        self.ui.draw_text_centered("ĐANG TÌM TRẬN...", self.ui.font_title, (255, 255, 255), 300)
-        pygame.display.flip()
-        
-        self.close_connection() # Đảm bảo ngắt kết nối cũ
-        
-        self.network = NetworkHandler()
-        if self.network.connect():
-            self.state = "PLAYING"
-        else:
-            print("❌ Không thể kết nối!")
-            self.screen.fill((0, 0, 0))
-            self.ui.draw_text_centered("KHÔNG TÌM THẤY SERVER!", self.ui.font_title, (255, 0, 0), 300)
-            pygame.display.flip()
-            time.sleep(2)
-            self.state = "MENU"
-
-    def close_connection(self):
-        """Hàm tiện ích để ngắt kết nối sạch sẽ"""
+    def _on_game_over(self, winner):
+        """Chỉ cập nhật trạng thái, UI sẽ được vẽ ở Main Loop"""
+        self.winner = winner
+        self.game_started = False
+        self.ui.set_screen("game_over")
+        self.sound_manager.play('game_over')
+    
+    def _on_disconnect(self):
+        self.ui.show_disconnected()
         if self.network:
-            print("🔌 Đóng kết nối mạng...")
-            try:
-                self.network.client.close()
-            except:
-                pass
-            self.network = None
-
+            self.network.connected = False 
+    
+    def _on_restart(self):
+        print("🎮 Game restarted!")
+        self.game_started = True
+        self.ui.set_screen("playing")
+    
     def run(self):
-        running = True
-        while running:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    running = False
+        """Main game loop với cấu trúc lồng nhau để hỗ trợ quay về Menu"""
+        try:
+            # [VÒNG LẶP NGOÀI]: Quản lý Menu Chính
+            while self.running:
                 
-                if event.type == pygame.MOUSEBUTTONDOWN:
-                    if self.state == "MENU":
-                        action = self.ui.handle_menu_click(event.pos)
-                        if action == "START":
-                            self.perform_connection()
-                        elif action == "QUIT":
-                            running = False
+                # 1. Hiển thị Main Menu
+                choice = self.ui.show_main_menu()
+                
+                if choice == "exit":
+                    break
+                
+                # Xử lý chọn chế độ (AI / Multiplayer)
+                ai_mode = False
+                ai_difficulty = "medium"
+                
+                if choice == "ai_mode":
+                    difficulty = self.ui.show_ai_difficulty_menu()
+                    if difficulty is None: 
+                        continue # Quay lại vòng lặp ngoài (Menu chính)
+                    ai_mode = True
+                    ai_difficulty = difficulty
+                
+                # 2. Kết nối Server (Tạo network mới mỗi lần chơi)
+                self.ui.show_connecting()
+                self.network = NetworkHandler()
+                self._setup_callbacks()
+                
+                if not self.network.connect(ai_mode=ai_mode, ai_difficulty=ai_difficulty):
+                    self.ui.show_disconnected()
+                    continue # Quay lại vòng lặp ngoài
+                
+                # 3. [VÒNG LẶP TRONG]: Gameplay Loop
+                while self.running and self.network.is_connected():
+                    self.input_handler.process_events()
                     
-                    elif self.state == "GAME_OVER":
-                        action = self.ui.handle_game_over_click(event.pos)
+                    if self.input_handler.should_quit():
+                        self.running = False
+                        break
+                    
+                    # --- XỬ LÝ CÁC MÀN HÌNH ---
+                    current_screen = self.ui.current_screen
+
+                    # A. Đang chơi
+                    if current_screen == "playing" and self.game_started:
+                        move_up, move_down = self.input_handler.get_movement()
+                        self.network.send_input(move_up, move_down)
                         
-                        if action == "RESTART":
-                            self.perform_connection()
+                        game_state = self.network.get_game_state()
+                        if game_state:
+                            self.renderer.draw_game(game_state, self.player_id)
+                            self.renderer.update()
                             
-                        # --- [MỚI] XỬ LÝ NÚT VỀ MENU ---
-                        elif action == "MENU":
-                            print("🔙 Quay về Menu chính")
-                            self.close_connection() # Ngắt kết nối với Server
-                            self.state = "MENU"     # Chuyển trạng thái
-                        # -------------------------------
+                    # B. Màn hình chờ
+                    elif current_screen in ["waiting", "waiting_restart"]:
+                        if current_screen == "waiting":
+                            self.renderer.draw_waiting()
+                        else:
+                            self.renderer.draw_waiting_restart()
+                        self.renderer.update()
                         
-                        # Không còn nút QUIT ở đây nữa (vì đã thay bằng MENU), 
-                        # nhưng cứ để logic nếu bạn muốn dùng lại sau này
-                        elif action == "QUIT": 
-                            running = False
+                    # C. Game Over (Hiện Menu chọn)
+                    elif current_screen == "game_over":
+                        # Hàm này sẽ chặn (blocking) cho đến khi người dùng chọn xong
+                        result = self.ui.show_game_over(self.winner, self.player_id)
+                        
+                        if result == "play_again":
+                            self.network.send_play_again()
+                            self.ui.set_screen("waiting_restart")
+                            
+                        elif result == "menu":
+                            self.network.disconnect() # Ngắt kết nối để thoát vòng lặp trong
+                            
+                        elif result == "exit":
+                            self.running = False
+                            
+                    # D. Đã ngắt kết nối
+                    elif current_screen == "disconnected":
+                        break # Thoát vòng lặp trong
 
-            # --- LOGIC VÀ VẼ ---
-            if self.state == "MENU":
-                self.ui.draw_main_menu()
-
-            elif self.state == "PLAYING":
-                net_status = self.network.status
+                    time.sleep(0.001) # Giảm tải CPU
                 
-                if net_status == "CONNECTING":
-                    self.screen.fill((0, 0, 0))
-                    self.ui.draw_text_centered("ĐANG KẾT NỐI...", self.ui.font_title, (255, 255, 255), 300)
+                # Dọn dẹp kết nối cũ khi thoát ra Menu chính
+                if self.network:
+                    self.network.disconnect()
+                    
+        except Exception as e:
+            print(f"❌ Error in game loop: {e}")
+        finally:
+            self.cleanup()
+    
+    def cleanup(self):
+        if self.network:
+            self.network.disconnect()
+        self.renderer.quit()
+        print("✅ Cleanup complete")
 
-                elif net_status == "WAITING":
-                    self.screen.fill((0, 0, 0))
-                    self.ui.draw_text_centered("ĐANG TÌM ĐỐI THỦ...", self.ui.font_title, (255, 255, 255), 300)
-                    if self.network.player_id:
-                        self.ui.draw_text_centered(f"ID của bạn: {self.network.player_id}", self.ui.font_msg, (150, 150, 150), 360)
-
-                elif net_status == "PLAYING":
-                    up, down = self.input_handler.get_input_data()
-                    self.network.send_input(up, down)
-                    self.renderer.draw("PLAYING", self.network.current_game_state, self.network.player_id)
-
-                elif net_status == "ENDED":
-                    self.state = "GAME_OVER"
-                
-                elif net_status == "DISCONNECTED":
-                    self.state = "MENU"
-
-            elif self.state == "GAME_OVER":
-                if self.network and self.network.current_game_state:
-                    self.renderer.draw("PLAYING", self.network.current_game_state, self.network.player_id)
-                self.ui.draw_game_over(self.network.winner, self.network.player_id)
-
-            pygame.display.flip()
-            self.clock.tick(FPS)
-
-        self.close_connection()
-        pygame.quit()
-        sys.exit()
+def main():
+    print("🎮 Classic Pong - Multiplayer Client")
+    client = GameClient()
+    try:
+        client.run()
+    except KeyboardInterrupt:
+        print("\n⚠️ Interrupted by user")
+    except Exception as e:
+        print(f"\n❌ Unexpected error: {e}")
+    finally:
+        print("\n👋 Thanks for playing!")
 
 if __name__ == "__main__":
-    client = PongClient()
-    client.run()
+    main()
