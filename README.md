@@ -31,3 +31,14 @@ classic_pong_multiplayer/
 
 TV1: phụ trách server & shared
 TV2: phụ trách client
+
+## HƯỚNG DẪN THAM GIA TRÒ CHƠI CLASSIC PONG
+# BƯỚC 1:
+    - Cài đặt các thư viện có trong file requirments.txt
+# Bước 2:
+    - Mở 1 terminal chạy server
+    - python run_server.py
+# Bước 3:
+    - Mở 1 terminal nếu chơi chế độ 1 mình với AI
+    - Mở 2 terminal nếu muốn chơi chế độ solo player vs player
+    - Run client bằng cách python run_client.py

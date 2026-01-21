@@ -22,9 +22,8 @@ class Renderer:
         self.clock = pygame.time.Clock()
 
         # --- BỔ SUNG ĐỂ THEO DÕI BÓNG ---
-        self.ball_color = WHITE  # Màu ban đầu
-        self.last_ball_x = width // 2 # Vị trí X của bóng ở frame trước
-        # Hướng di chuyển frame trước (1 là phải, -1 là trái, 0 là đứng yên)
+        self.ball_color = WHITE
+        self.last_ball_x = width // 2 
         self.last_dx_sign = 0
     
     def clear(self):
@@ -43,7 +42,7 @@ class Renderer:
         
         # Draw paddles
         self._draw_paddle(game_state.paddle1, player_id == 1)
-        self._draw_paddle(game_state.paddle2, player_id == 2 or player_id == 1)  # Highlight both if vs AI
+        self._draw_paddle(game_state.paddle2, player_id == 2 or player_id == 1) 
         
         # Draw ball
         self._draw_ball(game_state.ball)
@@ -106,14 +105,9 @@ class Renderer:
 
         # --- 2. Vẽ bóng TO HƠN ---
         
-        # Bước A: Tính tâm của bóng dựa trên hitbox thật (để bóng không bị lệch)
-        # ball.size là kích thước thật từ server gửi về
         real_center_x = int(ball.x + ball.size / 2)
         real_center_y = int(ball.y + ball.size / 2)
 
-        # Bước B: Tự quy định bán kính vẽ (Visual Radius)
-        # Bạn có thể nhân lên (ví dụ * 1.5) hoặc gán số cố định
-        # Ví dụ: ball.size mặc định thường là 10, ta vẽ radius = 10 (đường kính 20 -> to gấp đôi)
         visual_radius = int(ball.size * 0.8) # <--- CHỈNH SỐ NÀY ĐỂ BÓNG TO/NHỎ
         # Hoặc gán cứng: visual_radius = 15 
 
