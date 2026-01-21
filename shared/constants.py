@@ -1,0 +1,65 @@
+# shared/constants.py
+"""
+Hằng số dùng chung cho cả client và server
+"""
+
+# Network
+HOST = 'localhost'
+PORT = 5555
+BUFFER_SIZE = 4096
+
+# Screen
+SCREEN_WIDTH = 800
+SCREEN_HEIGHT = 600
+FPS = 60
+
+# Colors
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+GRAY = (128, 128, 128)
+
+# Paddle
+PADDLE_WIDTH = 15
+PADDLE_HEIGHT = 100
+PADDLE_SPEED = 8
+PADDLE_OFFSET = 20
+
+# Ball
+BALL_SIZE = 15
+BALL_SPEED_X = 10
+BALL_SPEED_Y = 10
+BALL_MAX_SPEED = 100
+BALL_SPEED_INCREMENT = 2  # Tăng thêm mỗi 10s
+BALL_SPEED_INTERVAL = 5  # Tăng tốc mỗi 10 giây
+# Game
+WINNING_SCORE = 5
+NET_WIDTH = 5
+FONT_SIZE = 48
+SMALL_FONT_SIZE = 24
+
+# Message Types
+MSG_CONNECT = "CONNECT"
+MSG_READY = "READY"
+MSG_GAME_STATE = "GAME_STATE"
+MSG_INPUT = "INPUT"
+MSG_DISCONNECT = "DISCONNECT"
+MSG_GAME_OVER = "GAME_OVER"
+MSG_WAIT = "WAIT"
+MSG_PLAYER_ID = "PLAYER_ID"
+MSG_PLAY_AGAIN = "PLAY_AGAIN"
+MSG_RESTART = "RESTART"
+MSG_AI_MODE = "AI_MODE"
+
+# UI Text
+TEXT_WIN = "WIN!"
+TEXT_LOSE = "LOSE!"
+TEXT_WINNER_ANNO = "Player {} Wins!"
+TEXT_PLAY_AGAIN = "Play Again"
+TEXT_MAIN_MENU = "Main Menu"
+TEXT_GAME_OVER_HINT = "Use arrow keys to select, Enter to confirm"
+
+# AI Settings
+AI_REACTION_DELAY = 0.05  # Delay để AI không quá hoàn hảo
+AI_DIFFICULTY_EASY = 0.6
+AI_DIFFICULTY_MEDIUM = 0.8
+AI_DIFFICULTY_HARD = 0.95
