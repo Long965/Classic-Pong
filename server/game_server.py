@@ -1,6 +1,6 @@
 # server/game_server.py
 """
-Server chính quản lý kết nối và game loop
+Server chính quản lý kết nối và game loop (Final Fix)
 """
 import socket
 import threading
@@ -10,7 +10,7 @@ from shared.protocol import Message
 from server.room_manager import RoomManager
 
 class GameServer:
-    def __init__(self, host=HOST, port=PORT):
+    def __init__(self, host='0.0.0.0', port=PORT):
         self.host = host
         self.port = port
         self.server_socket = None
@@ -91,9 +91,10 @@ class GameServer:
                 elif msg_type == MSG_DISCONNECT:
                     break
         
+        except ConnectionResetError:
+            print(f"👋 Client {addr} closed connection")
         except Exception as e:
             print(f"❌ Error handling client {addr}: {e}")
-        
         finally:
             self.disconnect_client(conn)
     
@@ -101,17 +102,15 @@ class GameServer:
         """Xử lý khi client connect (Multiplayer)"""
         room_id, player_id, room_full = self.room_manager.find_or_create_room(conn, addr, ai_mode=False)
         
-        # Gửi player ID
         conn.send(Message.player_id(player_id))
         
         if room_full:
             print(f"🎯 Room {room_id} is full! Starting game...")
             room = self.room_manager.get_room(conn)
-            for c in room.get_connections():
-                try:
-                    c.send(Message.ready())
-                except:
-                    pass
+            if room:
+                for c in room.get_connections():
+                    try: c.send(Message.ready())
+                    except: pass
         else:
             print(f"⏳ Player {player_id} waiting in room {room_id}...")
             conn.send(Message.wait())
@@ -123,17 +122,13 @@ class GameServer:
             conn, addr, ai_mode=True, ai_difficulty=difficulty
         )
         
-        # Gửi player ID
         conn.send(Message.player_id(player_id))
-        
         print(f"🤖 AI Room {room_id} created with difficulty: {difficulty}")
         
         # AI room tự động full ngay
         if room_full:
-            try:
-                conn.send(Message.ready())
-            except:
-                pass
+            try: conn.send(Message.ready())
+            except: pass
     
     def handle_ready(self, conn):
         """Xử lý khi player ready"""
@@ -155,47 +150,55 @@ class GameServer:
             room.game_logic.set_paddle_input(player_id, move_up, move_down)
     
     def handle_play_again(self, conn):
-        """Xử lý khi player muốn chơi lại"""
-        player_id = self.room_manager.get_player_id(conn)
-        room = self.room_manager.get_room(conn)
-        
-        if room:
-            should_restart = room.set_play_again(player_id)
+        """Xử lý khi player muốn chơi lại (PvP)"""
+        try:
+            room = self.room_manager.get_room(conn)
+            player_id = self.room_manager.get_player_id(conn)
             
-            if should_restart:
-                # Broadcast restart message đến cả 2 players
-                restart_msg = Message.restart()
-                for c in room.get_connections():
-                    try:
-                        c.send(restart_msg)
-                    except:
-                        pass
-    
+            if not room or not player_id:
+                return
+
+            # Kiểm tra chế độ chơi
+            if room.ai_mode:
+                # Nếu là AI (client thường tự disconnect, nhưng nếu gửi msg thì ta xử lý luôn)
+                print(f"🤖 AI Room {room.room_id} restarting...")
+                room.restart_game()
+                conn.send(Message.restart())
+            else:
+                # Nếu là PvP (Người vs Người)
+                # Dùng hàm set_play_again của RoomManager để đếm số người đồng ý
+                if room.set_play_again(player_id):
+                    # Nếu hàm trả về True -> Cả 2 người đã đồng ý -> Restart
+                    restart_msg = Message.restart()
+                    for c in room.get_connections():
+                        try: c.send(restart_msg)
+                        except: pass
+                        
+        except Exception as e:
+            print(f"❌ Error in handle_play_again: {e}")
+
     def disconnect_client(self, conn):
         """Xử lý disconnect"""
-        addr = self.clients.get(conn)
+        # Kiểm tra xem conn còn trong danh sách không
+        if conn not in self.clients:
+            return
+
+        addr = self.clients[conn]
         print(f"👋 Client {addr} disconnected")
         
-        # Remove from room
+        # Báo cho đối thủ biết
         room = self.room_manager.get_room(conn)
         if room:
-            # Notify other player
             for c in room.get_connections():
                 if c != conn:
-                    try:
-                        c.send(Message.disconnect())
-                    except:
-                        pass
+                    try: c.send(Message.disconnect())
+                    except: pass
         
         self.room_manager.remove_player(conn)
+        del self.clients[conn]
         
-        if conn in self.clients:
-            del self.clients[conn]
-        
-        try:
-            conn.close()
-        except:
-            pass
+        try: conn.close()
+        except: pass
     
     def game_loop(self):
         """Main game loop - chạy ở 60 FPS"""
@@ -214,7 +217,7 @@ class GameServer:
                     if room.ai_mode:
                         room.update_ai()
                     
-                    # Update game logic
+                    # Update game logic (truyền dt nếu cần, hiện tại giữ nguyên logic cũ)
                     room.game_logic.update()
                     
                     # Broadcast game state
@@ -222,19 +225,15 @@ class GameServer:
                     state_msg = Message.game_state(state)
                     
                     for conn in room.get_connections():
-                        try:
-                            conn.send(state_msg)
-                        except:
-                            pass
+                        try: conn.send(state_msg)
+                        except: pass
                     
                     # Check game over
                     if state.game_over:
                         game_over_msg = Message.game_over(state.winner)
                         for conn in room.get_connections():
-                            try:
-                                conn.send(game_over_msg)
-                            except:
-                                pass
+                            try: conn.send(game_over_msg)
+                            except: pass
                         room.active = False
                 
                 except Exception as e:
@@ -250,22 +249,15 @@ class GameServer:
         print("\n🛑 Shutting down server...")
         self.running = False
         
-        # Close all client connections
         for conn in list(self.clients.keys()):
-            try:
-                conn.close()
-            except:
-                pass
+            try: conn.close()
+            except: pass
         
-        # Close server socket
         if self.server_socket:
-            try:
-                self.server_socket.close()
-            except:
-                pass
+            try: self.server_socket.close()
+            except: pass
         
         print("✅ Server stopped")
-
 
 if __name__ == "__main__":
     server = GameServer()
